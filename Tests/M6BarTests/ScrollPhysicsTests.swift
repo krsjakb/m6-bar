@@ -1,7 +1,7 @@
 import Foundation
 
 private func check(_ value: @autoclosure () -> Bool, _ message: String = "Scroll assertion failed", line: UInt = #line) {
-    precondition(value(), message, file: #file, line: line)
+    if !value() { print("FAIL line \(line): \(message)"); exit(1) }
 }
 
 private func drain(_ physics: inout ScrollPhysics, from start: Double = 0, fps: Double = 120) -> [ScrollFrame] {
@@ -107,6 +107,18 @@ func momentumCanBeDisabledAndBurstsStayBounded() {
     check(frames.allSatisfy { $0.delta.y >= 0 })
 }
 
+func newWheelDuringMomentumKeepsTheUnfinishedDistance() {
+    var physics = ScrollPhysics(settings: .balanced)
+    var frames = physics.push(lines: ScrollVector(x: 0, y: 3), at: 0)
+    for i in 1...18 { frames += physics.tick(at: Double(i) / 120) }
+    let resumed = physics.push(lines: ScrollVector(x: 0, y: 3), at: 0.16)
+    check(resumed.first?.momentum == .ended)
+    check(resumed.last?.phase == .began)
+    frames += resumed
+    frames += drain(&physics, from: 0.16)
+    check(abs(frames.reduce(0) { $0 + $1.delta.y } - 108) < 0.001, "Resuming while coasting must preserve the remaining wheel distance")
+}
+
 func preferencesClampAndRoundTrip() throws {
     var settings = ScrollSettings.balanced
     settings.speed = .infinity
@@ -138,7 +150,8 @@ func preferencesClampAndRoundTrip() throws {
         cancellationClosesGestureAndNeverLeaksTail()
         disabledAndInvalidInputCannotGenerateMotion()
         momentumCanBeDisabledAndBurstsStayBounded()
+        newWheelDuringMomentumKeepsTheUnfinishedDistance()
         try preferencesClampAndRoundTrip()
-        print("PASS · 8 scroll physics groups: distance, frame rates, axes, reversal, cancellation, fail-open inputs, bursts, preferences")
+        print("PASS · 9 scroll physics groups: distance, frame rates, axes, reversal, cancellation, fail-open inputs, bursts, momentum resumption, preferences")
     }
 }

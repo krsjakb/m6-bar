@@ -1,12 +1,15 @@
 import Foundation
 import CoreGraphics
+import AppKit
 
 private func check(_ result: @autoclosure () -> Bool, line: UInt = #line) {
     precondition(result(), "Scroll event assertion failed", file: #file, line: line)
 }
 
 private func wheel(x: Int32 = 0, y: Int32 = 3) -> CGEvent {
-    CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: y, wheel2: x, wheel3: 0)!
+    let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: y, wheel2: x, wheel3: 0)!
+    event.setIntegerValueField(.eventTargetUnixProcessID, value: 123)
+    return event
 }
 
 @main struct ScrollEventTestRunner {
@@ -37,6 +40,7 @@ private func wheel(x: Int32 = 0, y: Int32 = 3) -> CGEvent {
         check(ScrollEventCodec.input(from: background, settings: settings, excludedPIDs: [123]) != nil)
         background.setIntegerValueField(.eventTargetUnixProcessID, value: 0)
         check(ScrollEventCodec.input(from: background, settings: settings, excludedPIDs: [321]) == nil)
+        check(ScrollEventCodec.input(from: background, settings: settings, excludedPIDs: []) == nil)
         var verticalOnly = settings
         verticalOnly.smoothHorizontal = false
         check(ScrollEventCodec.input(from: wheel(x: 1, y: 3), settings: verticalOnly, excludedPIDs: []) == nil)
@@ -61,6 +65,25 @@ private func wheel(x: Int32 = 0, y: Int32 = 3) -> CGEvent {
         let simple = codec.event(for: ScrollFrame(phase: .began), location: .zero, flags: [], trackpadPhases: false)!
         check(simple.getIntegerValueField(.scrollWheelEventScrollPhase) == 0)
         codec.reset()
+        let original = wheel()
+        original.setIntegerValueField(.eventTargetUnixProcessID, value: 456)
+        original.setIntegerValueField(.eventTargetProcessSerialNumber, value: 789)
+        original.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: 222)
+        original.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: 222)
+        original.setIntegerValueField(.mouseEventNumber, value: 555)
+        let copied = codec.event(for: ScrollFrame(delta: ScrollVector(x: 0, y: 5), phase: .changed),
+                                 location: CGPoint(x: 10, y: 20), flags: [], trackpadPhases: true, template: original)!
+        check(copied.getIntegerValueField(.eventTargetUnixProcessID) == 456)
+        check(copied.getIntegerValueField(.eventTargetProcessSerialNumber) == 789)
+        check(copied.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent) == 222)
+        check(copied.getIntegerValueField(.mouseEventNumber) == 555)
+        check(original.getIntegerValueField(.eventSourceUserData) != ScrollEventCodec.marker)
+        check(original.getIntegerValueField(.scrollWheelEventIsContinuous) == 0)
+        let native = NSEvent(cgEvent: copied)!
+        check(native.hasPreciseScrollingDeltas)
+        check(native.scrollingDeltaY == 5)
+        check(native.phase == .changed)
+        check(native.momentumPhase.isEmpty)
         print("PASS · scroll event integration: native input, modifiers, recursion, background-app exclusions, axes, fractional pixels, native phases")
     }
 }

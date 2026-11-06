@@ -4,6 +4,8 @@ Natív, magyar macOS menüsáv-alkalmazás a Keychron M6 akkumulátorához.
 
 Az 1.1-es verzió állítható, trackpadszerű görgetésjavítást is tartalmaz.
 
+Az 1.1.1-es javításban a menüsávos kijelzés a tartalom szélességéhez igazodik, felesleges szélső térköz nélkül.
+
 ## Használat
 
 A kész Apple Silicon alkalmazás a [GitHub-kiadásoknál](https://github.com/krsjakb/m6-bar/releases) tölthető le. A ZIP kicsomagolása után az **M6 Bar.app** áthelyezhető az Alkalmazások mappába.

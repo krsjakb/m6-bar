@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             NSApplication.shared.terminate(nil)
             return
         }
-        status = NSStatusBar.system.statusItem(withLength: 72)
+        status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = status.button {
             button.target = self
             button.action = #selector(togglePopover)
@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func updateStatus() {
         guard let button = status?.button else { return }
-        button.title = model.isFresh ? " \(model.battery.map(String.init) ?? "—")%" : " —"
+        button.title = model.isFresh ? "\(model.battery.map(String.init) ?? "—")%" : "—"
         let symbol = model.isFresh && model.isCharging ? "computermouse.fill" : "computermouse"
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Keychron M6")
         image?.isTemplate = true

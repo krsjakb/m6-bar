@@ -77,6 +77,8 @@ A görgetési tesztek lefedik a távolság megőrzését, a 60/120/144 Hz-es id�
 
 A fizikai görgetési érzetet a véglegesen telepített app rendszerengedélyének megadása után az M6 görgőjével kell ellenőrizni; a programozott egységtesztek ezt nem helyettesítik.
 
+Ezen a Macen a javított 1.1-es verziót a felhasználó fizikai M6-tal, Chrome-ban ellenőrizte: a görgetés működik, a mutató a görgetés alatt is szabadon mozog.
+
 Fejlesztői hibaelhárításhoz a `--record-status` indítási kapcsoló az app saját `~/Library/Application Support/M6Bar/runtime-status.json` fájljába írja a működési állapotot. Ez az akkumulátor, a görgetőmotor és az engedély állapotát tartalmazza, képernyőtartalmat és beviteli eseményeket nem. A kapcsoló nélkül ez az állapotrögzítés nem fut.
 
 ## Protokollforrások

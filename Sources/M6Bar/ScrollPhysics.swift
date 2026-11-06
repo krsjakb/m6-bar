@@ -86,6 +86,7 @@ struct ScrollPhysics {
             y: min(100, max(-100, lines.y)) * 18 * settings.speed * (settings.reverseVertical ? -1 : 1))
         var frames: [ScrollFrame] = []
         let reversed = pixels.x * direction.x < 0 || pixels.y * direction.y < 0
+        let carry = isActive && inMomentum && !reversed && time >= lastTick && time - lastInput <= 0.5 ? target - position : .zero
         if isActive && (inMomentum || reversed || time < lastTick || time - lastInput > 0.5) { frames += cancel() }
         if !isActive {
             isActive = true
@@ -93,7 +94,7 @@ struct ScrollPhysics {
             lastTick = time
             position = ScrollVector(x: pixels.x == 0 ? 0 : min(1, abs(pixels.x)) * (pixels.x > 0 ? 1 : -1),
                                     y: pixels.y == 0 ? 0 : min(1, abs(pixels.y)) * (pixels.y > 0 ? 1 : -1))
-            target = .zero
+            target = carry
             frames.append(ScrollFrame(delta: position, phase: .began))
         }
         target = target + pixels

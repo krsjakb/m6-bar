@@ -1,6 +1,11 @@
 import AppKit
 import Observation
 import ServiceManagement
+@preconcurrency import ApplicationServices
+import UniformTypeIdentifiers
+
+enum PanelSection { case battery, scrolling, settings }
+struct ScrollExcludedApp: Identifiable { let id: String; let name: String }
 
 @Observable @MainActor
 final class AppModel {
@@ -17,7 +22,44 @@ final class AppModel {
     private(set) var firmware: String?
     private(set) var history: [BatterySample] = []
     private(set) var launchError: String?
-    var showSettings = false
+    var panelSection = PanelSection.battery
+    var showSettings: Bool {
+        get { panelSection == .settings }
+        set { panelSection = newValue ? .settings : .battery }
+    }
+    var scrollSettings = ScrollSettings.balanced { didSet { scrollSettingsChanged() } }
+    private(set) var scrollPermissionGranted = AXIsProcessTrusted() && CGPreflightPostEventAccess()
+    private(set) var scrollServiceState = ScrollServiceState.off
+    private(set) var scrollConflictMessage: String?
+    private(set) var scrollError: String?
+    var isScrollActive: Bool { scrollServiceState == .active }
+    var needsScrollPermission: Bool { scrollSettings.enabled && !scrollPermissionGranted }
+    var scrollStatusTitle: String {
+        switch scrollServiceState {
+        case .off: "Kikapcsolva"
+        case .permissionRequired: "Rendszerengedély szükséges"
+        case .starting: "Indítás…"
+        case .active: "Görgetésjavítás aktív"
+        case .paused: "Szünetel"
+        case .failed: "A simítás nem aktív"
+        }
+    }
+    var scrollStatusMessage: String {
+        switch scrollServiceState {
+        case .off: "Kapcsold be a finomabb, lendületes görgetéshez."
+        case .permissionRequired: "A görgő jeleinek átalakításához engedélyezd az M6 Bart a Rendszerbeállításokban."
+        case .starting: "A görgetőmotor indul."
+        case .active: "A hagyományos egérgörgők mozgását finom, folyamatos görgetéssé alakítja."
+        case let .paused(message), let .failed(message): message
+        }
+    }
+    var scrollExcludedApps: [ScrollExcludedApp] {
+        scrollSettings.excludedBundleIDs.map { id in
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
+            let name = url.map { FileManager.default.displayName(atPath: $0.path) } ?? id
+            return ScrollExcludedApp(id: id, name: name.replacingOccurrences(of: ".app", with: ""))
+        }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
     private(set) var isRefreshing = true
     private var launchRevision = 0
     var launchAtLogin: Bool {
@@ -39,6 +81,8 @@ final class AppModel {
     }
     var onChange: (() -> Void)?
     @ObservationIgnored private var monitor: HIDMonitor?
+    @ObservationIgnored private var scrollEngine: ScrollEventEngine?
+    @ObservationIgnored private var scrollSleeping = false
     @ObservationIgnored private var heartbeat: Timer?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var session = UUID()
@@ -60,6 +104,10 @@ final class AppModel {
         // A persisted sample is historical, never a fresh device measurement.
         battery = history.last?.percent
         lastUpdated = history.last?.date
+        if let stored = UserDefaults.standard.data(forKey: "scrollSettings.v1") {
+            do { scrollSettings = try JSONDecoder().decode(ScrollSettings.self, from: stored).normalized() }
+            catch { scrollError = "A görgetési beállítások nem olvashatók; az alapbeállításokat használjuk." }
+        }
     }
 
     func start() {
@@ -67,6 +115,10 @@ final class AppModel {
             DispatchQueue.main.async { self?.handle(event) }
         }
         monitor?.start()
+        scrollEngine = ScrollEventEngine(configuration: scrollConfiguration()) { [weak self] state in
+            DispatchQueue.main.async { self?.scrollServiceState = state; self?.onChange?() }
+        }
+        scrollEngine?.start()
         heartbeat = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -76,6 +128,7 @@ final class AppModel {
                     self.statusMessage = "Régebbi mérés. Mozdítsd meg az egeret, majd frissíts."
                 }
                 self.onChange?()
+                self.synchronizeScrolling()
             }
         }
         let center = NSWorkspace.shared.notificationCenter
@@ -85,12 +138,22 @@ final class AppModel {
         observers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.pause(sleeping: false) }
         })
+        observers.append(center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scrollEngine?.cancel(); self?.synchronizeScrolling() }
+        })
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.synchronizeScrolling() }
+            })
+        }
     }
 
     private func pause(sleeping: Bool) {
         isFresh = false; session = UUID()
         statusMessage = sleeping ? "A megfigyelés szünetel." : "Újracsatlakozás…"
         monitor?.setSleeping(sleeping)
+        scrollSleeping = sleeping
+        synchronizeScrolling()
         onChange?()
     }
 
@@ -148,7 +211,7 @@ final class AppModel {
         panel.nameFieldStringValue = "M6-Bar-diagnosztika.txt"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let report = """
-        M6 Bar 1.0 · helyi diagnosztika
+        M6 Bar 1.1 · helyi diagnosztika
         Modell: Keychron M6 (3434:d060)
         Kapcsolat: \(connectionLabel)
         Friss mérés: \(isFresh)
@@ -161,6 +224,10 @@ final class AppModel {
         Állapot: \(statusMessage)
         Előzmények: \(history.count) mérés
         Tárolás: \(persistenceError ?? "Rendben")
+        Görgetés: \(scrollStatusTitle)
+        Görgetés állapota: \(scrollStatusMessage)
+        Görgetési engedély: \(scrollPermissionGranted)
+        Sebesség: \(scrollSettings.speed), simítás: \(scrollSettings.smoothing), lendület: \(scrollSettings.momentum)
         """
         do { try report.write(to: url, atomically: true, encoding: .utf8) }
         catch {
@@ -169,6 +236,73 @@ final class AppModel {
         }
     }
 
-    func stop() { monitor?.stop(); heartbeat?.invalidate() }
+    private func scrollSettingsChanged() {
+        do {
+            let data = try JSONEncoder().encode(scrollSettings.normalized())
+            UserDefaults.standard.set(data, forKey: "scrollSettings.v1")
+            scrollError = nil
+        } catch { scrollError = "A görgetési beállítások mentése sikertelen: \(error.localizedDescription)" }
+        synchronizeScrolling()
+    }
+
+    private func scrollConfiguration() -> ScrollEngineConfiguration {
+        let excluded = Set(scrollSettings.excludedBundleIDs)
+        let pids = Set(NSWorkspace.shared.runningApplications.compactMap { app -> Int32? in
+            guard let id = app.bundleIdentifier, excluded.contains(id) else { return nil }
+            return app.processIdentifier
+        })
+        return ScrollEngineConfiguration(settings: scrollSettings.normalized(), excludedPIDs: pids,
+                                         permitted: scrollPermissionGranted, sleeping: scrollSleeping)
+    }
+
+    private func synchronizeScrolling() {
+        scrollPermissionGranted = AXIsProcessTrusted() && CGPreflightPostEventAccess()
+        let known: [(String, String)] = [
+            ("com.nuebling.mac-mouse-fix", "Mac Mouse Fix"), ("com.caldis.Mos", "Mos"),
+            ("com.linearmouse", "LinearMouse"), ("com.smoothscroll", "SmoothScroll"), ("com.better-mouse", "BetterMouse")
+        ]
+        let ids = NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier)
+        let conflicts = known.filter { prefix, _ in ids.contains { $0.lowercased().hasPrefix(prefix.lowercased()) } }.map(\.1)
+        scrollConflictMessage = conflicts.isEmpty ? nil : "Másik görgetőapp is fut: \(conflicts.joined(separator: ", ")). A legjobb eredményhez csak az egyik appban legyen bekapcsolva a simítás."
+        scrollEngine?.configure(scrollConfiguration())
+    }
+
+    func requestScrollPermission() {
+        scrollSettings.enabled = true
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        if AXIsProcessTrusted() && !CGPreflightPostEventAccess() { _ = CGRequestPostEventAccess() }
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) }
+        retryScrolling()
+    }
+
+    func retryScrolling() { synchronizeScrolling(); scrollEngine?.retry() }
+    func selectScrollPreset(_ preset: ScrollPreset) {
+        var settings = scrollSettings; settings.apply(preset); scrollSettings = settings
+    }
+    func resetScrollSettings() {
+        var settings = ScrollSettings.balanced
+        settings.enabled = scrollSettings.enabled
+        settings.excludedBundleIDs = scrollSettings.excludedBundleIDs
+        scrollSettings = settings
+    }
+    func addScrollExcludedApp() {
+        let panel = NSOpenPanel()
+        panel.title = "Melyik alkalmazásban maradjon natív a görgetés?"
+        panel.prompt = "Kihagyás"
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let id = Bundle(url: url)?.bundleIdentifier else { scrollError = "Az alkalmazás nem azonosítható."; return }
+        if !scrollSettings.excludedBundleIDs.contains(id) { scrollSettings.excludedBundleIDs.append(id) }
+    }
+    func removeScrollExcludedApp(_ id: String) { scrollSettings.excludedBundleIDs.removeAll { $0 == id } }
+
+    func stop() {
+        monitor?.stop(); scrollEngine?.stop(); heartbeat?.invalidate()
+        for token in observers { NSWorkspace.shared.notificationCenter.removeObserver(token) }
+        observers.removeAll()
+    }
     func quit() { NSApplication.shared.terminate(nil) }
 }

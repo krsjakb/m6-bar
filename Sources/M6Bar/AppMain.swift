@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         model.onChange = { [weak self] in self?.updateStatus() }
         updateStatus()
         model.start()
+        if CommandLine.arguments.contains("--scrolling") { model.panelSection = .scrolling }
         if !UserDefaults.standard.bool(forKey: "hasOpened") || CommandLine.arguments.contains("--show") {
             UserDefaults.standard.set(true, forKey: "hasOpened")
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.showPopover() }
@@ -98,6 +99,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         button.contentTintColor = model.isFresh && (model.battery ?? 100) <= 15 && !model.isCharging ? .systemOrange : nil
         button.toolTip = model.isFresh ? "Keychron M6 · \(model.battery ?? 0)% · \(model.statusMessage)" : "Keychron M6 · Nincs friss mérés"
         button.setAccessibilityLabel(button.toolTip)
+        if CommandLine.arguments.contains("--record-status") { recordStatus() }
+    }
+
+    private func recordStatus() {
+        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("M6Bar")
+        let value: [String: Any] = ["pid": ProcessInfo.processInfo.processIdentifier,
+            "battery": model.battery.map { $0 as Any } ?? NSNull(), "batteryFresh": model.isFresh,
+            "scrollEnabled": model.scrollSettings.enabled, "scrollActive": model.isScrollActive,
+            "scrollPermission": model.scrollPermissionGranted, "scrollStatus": model.scrollStatusTitle,
+            "scrollMessage": model.scrollStatusMessage, "updated": Date().ISO8601Format()]
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]).write(to: folder.appendingPathComponent("runtime-status.json"), options: .atomic)
+        } catch { NSLog("M6 Bar diagnostic status could not be written: %@", error.localizedDescription) }
     }
 
     @objc private func togglePopover() {

@@ -23,10 +23,21 @@ struct PopoverView: View {
                 .padding(.top, 22)
                 .padding(.bottom, 10)
 
+            HStack(spacing: 4) {
+                sectionButton("Akkumulátor", symbol: "battery.75percent", section: .battery)
+                sectionButton("Görgetés", symbol: "hand.draw", section: .scrolling)
+            }
+            .padding(3)
+            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, 24)
+            .padding(.bottom, 12)
+
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 18) {
                     if model.showSettings {
                         settings
+                    } else if model.panelSection == .scrolling {
+                        ScrollSettingsView(model: model)
                     } else {
                         batteryHero
                         if !model.isFresh { connectionNotice }
@@ -51,6 +62,19 @@ struct PopoverView: View {
                 .accessibilityHidden(true)
         }
         .tint(accent)
+    }
+
+    private func sectionButton(_ title: String, symbol: String, section: PanelSection) -> some View {
+        Button { model.panelSection = section } label: {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 11, weight: .medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(model.panelSection == section ? accent.opacity(0.13) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(model.panelSection == section ? accent : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(model.panelSection == section ? [.isSelected] : [])
     }
 
     private var header: some View {
@@ -304,7 +328,7 @@ struct PopoverView: View {
                     .font(.system(size: 11))
             }
             .buttonStyle(.plain)
-            Text("A mérések ezen a Macen maradnak. M6 Bar 1.0")
+            Text("A mérések és beállítások ezen a Macen maradnak. M6 Bar 1.1")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
         }

@@ -22,3 +22,10 @@ if [[ -f "$project_dir/Sources/M6Bar/ScrollEventCodec.swift" ]]; then
 fi
 xcrun swiftc -swift-version 6 -parse-as-library "${event_sources[@]}" -o "$build_dir/ScrollEventTests"
 "$build_dir/ScrollEventTests"
+xcrun swiftc -swift-version 6 -parse-as-library \
+    "$project_dir/Sources/M6Bar/ScrollPhysics.swift" \
+    "$project_dir/Sources/M6Bar/ScrollEventCodec.swift" \
+    "$project_dir/Sources/M6Bar/ScrollEventEngine.swift" \
+    "$project_dir/Tests/M6BarTests/ScrollEngineTests.swift" \
+    -o "$build_dir/ScrollEngineTests"
+"$build_dir/ScrollEngineTests"

@@ -16,3 +16,9 @@ xcrun swiftc -swift-version 6 -parse-as-library \
     "${scroll_sources[@]}" \
     -o "$build_dir/ScrollPhysicsTests"
 "$build_dir/ScrollPhysicsTests"
+event_sources=("$project_dir/Tests/M6BarTests/ScrollEventTests.swift" "$project_dir/Sources/M6Bar/ScrollPhysics.swift")
+if [[ -f "$project_dir/Sources/M6Bar/ScrollEventCodec.swift" ]]; then
+    event_sources+=("$project_dir/Sources/M6Bar/ScrollEventCodec.swift")
+fi
+xcrun swiftc -swift-version 6 -parse-as-library "${event_sources[@]}" -o "$build_dir/ScrollEventTests"
+"$build_dir/ScrollEventTests"

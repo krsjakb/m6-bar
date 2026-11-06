@@ -3,7 +3,7 @@ import CoreGraphics
 import AppKit
 
 private func check(_ result: @autoclosure () -> Bool, line: UInt = #line) {
-    precondition(result(), "Scroll event assertion failed", file: #file, line: line)
+    if !result() { print("FAIL scroll event assertion at line \(line)"); exit(1) }
 }
 
 private func wheel(x: Int32 = 0, y: Int32 = 3) -> CGEvent {
@@ -75,8 +75,9 @@ private func wheel(x: Int32 = 0, y: Int32 = 3) -> CGEvent {
                                  location: CGPoint(x: 10, y: 20), flags: [], trackpadPhases: true, template: original)!
         check(copied.getIntegerValueField(.eventTargetUnixProcessID) == 456)
         check(copied.getIntegerValueField(.eventTargetProcessSerialNumber) == 789)
-        check(copied.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent) == 222)
-        check(copied.getIntegerValueField(.mouseEventNumber) == 555)
+        check(copied.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent) == original.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent))
+        check(copied.getIntegerValueField(.mouseEventNumber) == original.getIntegerValueField(.mouseEventNumber))
+        check(copied.getIntegerValueField(.eventSourceStateID) == original.getIntegerValueField(.eventSourceStateID))
         check(original.getIntegerValueField(.eventSourceUserData) != ScrollEventCodec.marker)
         check(original.getIntegerValueField(.scrollWheelEventIsContinuous) == 0)
         let native = NSEvent(cgEvent: copied)!
@@ -84,6 +85,14 @@ private func wheel(x: Int32 = 0, y: Int32 = 3) -> CGEvent {
         check(native.scrollingDeltaY == 5)
         check(native.phase == .changed)
         check(native.momentumPhase.isEmpty)
+        check(native.windowNumber == NSEvent(cgEvent: original)!.windowNumber)
+        original.location = CGPoint(x: 123, y: -456)
+        let preservedPosition = codec.event(for: ScrollFrame(delta: ScrollVector(x: 0, y: 5), phase: .changed),
+                                            location: CGPoint(x: 999, y: 888), flags: [], trackpadPhases: true, template: original)!
+        check(preservedPosition.location == original.location)
+        let slowDetent = wheel(y: 1)
+        slowDetent.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: 0.100006103515625)
+        check(ScrollEventCodec.input(from: slowDetent, settings: settings, excludedPIDs: []) == ScrollVector(x: 0, y: 1))
         print("PASS · scroll event integration: native input, modifiers, recursion, background-app exclusions, axes, fractional pixels, native phases")
     }
 }

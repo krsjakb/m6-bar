@@ -58,6 +58,15 @@ func reversalStopsOldDirectionImmediately() {
     let tail = drain(&physics, from: 0.025)
     check(reversed.contains { $0.phase == .cancelled })
     check((reversed + tail).allSatisfy { $0.delta.y <= 0 })
+
+    physics = ScrollPhysics(settings: .balanced)
+    _ = physics.push(lines: ScrollVector(x: 10, y: 0), at: 1)
+    _ = physics.tick(at: 1.01)
+    _ = physics.push(lines: ScrollVector(x: 0, y: 1), at: 1.015)
+    _ = physics.tick(at: 1.02)
+    let horizontalReversal = physics.push(lines: ScrollVector(x: -1, y: 0), at: 1.025)
+    check(horizontalReversal.contains { $0.phase == .cancelled }, "Vertical input must not erase the pending horizontal direction")
+    check(drain(&physics, from: 1.025).allSatisfy { $0.delta.x <= 0 })
 }
 
 func cancellationClosesGestureAndNeverLeaksTail() {

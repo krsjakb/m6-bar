@@ -101,7 +101,8 @@ struct ScrollPhysics {
         // Bound outstanding motion even if a high-rate free-spinning wheel floods the queue.
         let pending = target - position
         target = position + ScrollVector(x: min(4000, max(-4000, pending.x)), y: min(4000, max(-4000, pending.y)))
-        direction = pixels
+        if pixels.x != 0 { direction.x = pixels.x }
+        if pixels.y != 0 { direction.y = pixels.y }
         lastInput = time
         return frames
     }

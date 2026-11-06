@@ -30,11 +30,15 @@ A **Görgetés** fülön kapcsolható be és hangolható a görgetésjavítás. 
 
 Az első bekapcsoláshoz rendszerengedély kell. A **Rendszerengedély…** gomb a megfelelő macOS-beállítást nyitja meg; a hozzáférést a felhasználó engedélyezi az **M6 Bar** számára. A pontos elnevezés macOS-verziótól függően Kisegítő lehetőségek vagy Eszközvezérlés és adathozzáférés lehet. Az app az engedélyt néhány másodpercenként újraellenőrzi, vagy az **Újraellenőrzés** gomb használható.
 
+Helyileg újrafordított, ad hoc aláírású frissítésnél előfordulhat, hogy a rendszer listájában a kapcsoló bekapcsolva marad, de az új build mégsem kap hozzáférést. Ilyenkor az M6 Bar régi bejegyzését a listából el kell távolítani, majd az **Alkalmazások / M6 Bar.app** fájlt újra hozzáadni és engedélyezni. Az app nem módosítja és nem kerüli meg a macOS engedélyeit.
+
 A javítás minden hagyományos, lépcsőzetes egérgörgőre érvényes. A nyilvános macOS-eseményfelület ezen a ponton nem azonosítja az egyes egereket, ezért a funkciót nem csak az M6-ra szűrjük. A folytonos trackpad-/Magic Mouse-jelek, valamint a Shift/Ctrl/Option/Cmd melletti görgetés natív maradnak. Kattintás, módosítóbillentyű, alkalmazásváltás, alvás vagy kikapcsolás megszakítja az aktuális lendületet. A kivételek a görgetést ténylegesen fogadó alkalmazásra vonatkoznak, a háttérablakokat is beleértve.
 
 Az engedély hiánya vagy a görgetőmotor hibája esetén az eredeti macOS-görgetés használható. Az akkumulátorfigyelés rendszerengedély nélkül is működik. Más görgetést módosító app észlelésekor a panel jelzi az esetleges ütközést.
 
 A megvalósítás saját, nyilvános Quartz API-kra épülő kód; nem tartalmaz Mac Mouse Fix-forráskódot. Csak a görgő, az egérgombok lenyomása és a módosítóbillentyűk állapotváltozása kerül az eseményszűrőhöz. Billentyűleütéseket és egérmozgást nem figyel vagy tárol. A beállítások helyben maradnak.
+
+A simított események az eredeti fizikai jel másolatából készülnek, és közvetlenül az eredeti célfolyamathoz kerülnek. Az eredeti natív ablakpozíciót megőrizzük: az esemény globális pozíciójának azonos értékkel való felülírása is érvénytelenítheti az ablakon belüli adatot. Ezt a konkrét M6 valódi jelével, a natív adatok változatlanságát ellenőrizve is teszteltük.
 
 ## Üzemidőbecslés
 
@@ -72,6 +76,8 @@ A tesztek a valóban rögzített hardverválaszt, az érvénytelen/rövid üzene
 A görgetési tesztek lefedik a távolság megőrzését, a 60/120/144 Hz-es időzítést, irányváltást, két tengely váltakozását, a lendület folytatását és megszakítását, érvénytelen adatokat, beállításokat, eredeti trackpad-jelek átengedését, saját események visszacsatolásának kizárását, alkalmazáskivételeket és tört pixeleket. A szolgáltatás életciklustesztje engedélyhiányt, kikapcsolást, alvást és leállítást ellenőriz globális eseményelfogás nélkül. A görgetési matematika mért sorlefedettsége 97,08%.
 
 A fizikai görgetési érzetet a véglegesen telepített app rendszerengedélyének megadása után az M6 görgőjével kell ellenőrizni; a programozott egységtesztek ezt nem helyettesítik.
+
+Fejlesztői hibaelhárításhoz a `--record-status` indítási kapcsoló az app saját `~/Library/Application Support/M6Bar/runtime-status.json` fájljába írja a működési állapotot. Ez az akkumulátor, a görgetőmotor és az engedély állapotát tartalmazza, képernyőtartalmat és beviteli eseményeket nem. A kapcsoló nélkül ez az állapotrögzítés nem fut.
 
 ## Protokollforrások
 
